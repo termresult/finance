@@ -13,7 +13,7 @@ React admin for TermResult platform subscription billing (per school session/ter
 - Settings (org + settlement account)
 - School Portal stub (later)
 - simple features implemented
-- 
+- added vercel.json
 
 ## Stack
 
