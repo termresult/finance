@@ -1,137 +1,266 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Landmark, Settings2, Shield, SlidersHorizontal } from 'lucide-react'
+import ManageAdminsTab from './settings/ManageAdminsTab'
 
-export default function Settings({ showToast }) {
+const tabs = [
+  { id: 'billing', name: 'Billing defaults', icon: Settings2 },
+  { id: 'settlement', name: 'Settlement account', icon: Landmark },
+  { id: 'manage-admins', name: 'Manage Admins', icon: Shield },
+]
+
+function BillingDefaultsTab({ settings, saveSettings }) {
   const [form, setForm] = useState({
-    orgName: 'TermResult Finance',
-    supportEmail: 'billing@termresult.com',
-    defaultDueDays: 14,
-    emailReminders: true,
-    whatsappReminders: true,
-    reminderLeadDays: 3,
-    bankName: 'First Bank of Nigeria',
-    accountName: 'TermResult Technologies',
-    accountNumber: '2033441189',
+    organization_name: '',
+    support_email: '',
+    default_due_days: 14,
+    reminder_email_enabled: true,
   })
+  const [busy, setBusy] = useState(false)
 
-  function save(e) {
+  useEffect(() => {
+    if (!settings) return
+    setForm({
+      organization_name: settings.organization_name || '',
+      support_email: settings.support_email || '',
+      default_due_days: settings.default_due_days ?? 14,
+      reminder_email_enabled: Boolean(settings.reminder_email_enabled),
+    })
+  }, [settings])
+
+  async function save(e) {
     e.preventDefault()
-    showToast('Settings saved (local preview)')
+    setBusy(true)
+    try {
+      await saveSettings({
+        organization_name: form.organization_name,
+        support_email: form.support_email,
+        default_due_days: form.default_due_days,
+        reminder_email_enabled: form.reminder_email_enabled,
+        reminder_whatsapp_enabled: false,
+      })
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
-    <div className="page-stack">
-      <form className="panel" onSubmit={save}>
-        <div className="panel-header">
-          <div>
-            <h2>Billing defaults</h2>
-            <p>These values will map to Flask settings once the API is connected</p>
-          </div>
-          <button className="btn btn-primary" type="submit">
-            Save changes
-          </button>
+    <form className="panel" onSubmit={save}>
+      <div className="panel-header">
+        <div>
+          <h2>Billing defaults</h2>
+          <p>Organisation details, due dates, and reminder preferences</p>
         </div>
-        <div className="panel-body">
-          <div className="form-grid">
-            <label className="field-label">
-              Organisation name
-              <input
-                className="field"
-                value={form.orgName}
-                onChange={(e) => setForm((f) => ({ ...f, orgName: e.target.value }))}
-              />
-            </label>
-            <label className="field-label">
-              Support email
-              <input
-                className="field"
-                type="email"
-                value={form.supportEmail}
-                onChange={(e) => setForm((f) => ({ ...f, supportEmail: e.target.value }))}
-              />
-            </label>
-            <label className="field-label">
-              Default due days
-              <input
-                className="field"
-                type="number"
-                min="1"
-                value={form.defaultDueDays}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, defaultDueDays: Number(e.target.value) }))
-                }
-              />
-            </label>
-            <label className="field-label">
-              Reminder lead days
-              <input
-                className="field"
-                type="number"
-                min="1"
-                value={form.reminderLeadDays}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, reminderLeadDays: Number(e.target.value) }))
-                }
-              />
-            </label>
-          </div>
+        <button className="btn btn-primary" type="submit" disabled={busy}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+      <div className="panel-body">
+        <div className="form-grid">
+          <label className="field-label">
+            Organisation name
+            <input
+              className="field"
+              value={form.organization_name}
+              onChange={(e) => setForm((f) => ({ ...f, organization_name: e.target.value }))}
+            />
+          </label>
+          <label className="field-label">
+            Support email
+            <input
+              className="field"
+              type="email"
+              value={form.support_email}
+              onChange={(e) => setForm((f) => ({ ...f, support_email: e.target.value }))}
+            />
+          </label>
+          <label className="field-label">
+            Default due days
+            <input
+              className="field"
+              type="number"
+              min="1"
+              value={form.default_due_days}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, default_due_days: Number(e.target.value) }))
+              }
+            />
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={form.reminder_email_enabled}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, reminder_email_enabled: e.target.checked }))
+              }
+            />
+            Enable email reminders
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontWeight: 600,
+              opacity: 0.55,
+            }}
+          >
+            <input type="checkbox" checked={false} disabled />
+            WhatsApp reminders (coming later)
+          </label>
+        </div>
+      </div>
+    </form>
+  )
+}
 
-          <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-              <input
-                type="checkbox"
-                checked={form.emailReminders}
-                onChange={(e) => setForm((f) => ({ ...f, emailReminders: e.target.checked }))}
-              />
-              Enable email reminders
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-              <input
-                type="checkbox"
-                checked={form.whatsappReminders}
-                onChange={(e) => setForm((f) => ({ ...f, whatsappReminders: e.target.checked }))}
-              />
-              Enable WhatsApp reminders
-            </label>
-          </div>
-        </div>
-      </form>
+function SettlementTab({ settings, saveSettings }) {
+  const [form, setForm] = useState({
+    bank_name: '',
+    bank_account_name: '',
+    bank_account_number: '',
+  })
+  const [busy, setBusy] = useState(false)
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>Settlement account</h2>
-            <p>Shown on invoices for school bank transfers</p>
-          </div>
+  useEffect(() => {
+    if (!settings) return
+    setForm({
+      bank_name: settings.bank_name || '',
+      bank_account_name: settings.bank_account_name || '',
+      bank_account_number: settings.bank_account_number || '',
+    })
+  }, [settings])
+
+  async function save(e) {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await saveSettings({
+        bank_name: form.bank_name,
+        bank_account_name: form.bank_account_name,
+        bank_account_number: form.bank_account_number,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="panel" onSubmit={save}>
+      <div className="panel-header">
+        <div>
+          <h2>Settlement account</h2>
+          <p>Shown on invoice emails for school bank transfers</p>
         </div>
-        <div className="panel-body">
-          <div className="form-grid">
-            <label className="field-label">
-              Bank name
-              <input
-                className="field"
-                value={form.bankName}
-                onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
-              />
-            </label>
-            <label className="field-label">
-              Account name
-              <input
-                className="field"
-                value={form.accountName}
-                onChange={(e) => setForm((f) => ({ ...f, accountName: e.target.value }))}
-              />
-            </label>
-            <label className="field-label full">
-              Account number
-              <input
-                className="field"
-                value={form.accountNumber}
-                onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value }))}
-              />
-            </label>
-          </div>
+        <button className="btn btn-primary" type="submit" disabled={busy}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+      <div className="panel-body">
+        <div className="form-grid">
+          <label className="field-label">
+            Bank name
+            <input
+              className="field"
+              value={form.bank_name}
+              onChange={(e) => setForm((f) => ({ ...f, bank_name: e.target.value }))}
+            />
+          </label>
+          <label className="field-label">
+            Account name
+            <input
+              className="field"
+              value={form.bank_account_name}
+              onChange={(e) => setForm((f) => ({ ...f, bank_account_name: e.target.value }))}
+            />
+          </label>
+          <label className="field-label full">
+            Account number
+            <input
+              className="field"
+              value={form.bank_account_number}
+              onChange={(e) => setForm((f) => ({ ...f, bank_account_number: e.target.value }))}
+            />
+          </label>
         </div>
-      </section>
+      </div>
+    </form>
+  )
+}
+
+export default function Settings({ settings, saveSettings, showToast }) {
+  const [activeTab, setActiveTab] = useState('billing')
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const activeMeta = tabs.find((t) => t.id === activeTab) || tabs[0]
+
+  function selectTab(id) {
+    setActiveTab(id)
+    setDrawerOpen(false)
+  }
+
+  return (
+    <div className="settings-shell">
+      <div className="settings-tabs">
+        {tabs.map((tab) => {
+          const Icon = tab.icon
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              className={`settings-tab ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => selectTab(tab.id)}
+            >
+              <Icon size={14} />
+              {tab.name}
+            </button>
+          )
+        })}
+      </div>
+
+      <button
+        type="button"
+        className="settings-tab-mobile"
+        onClick={() => setDrawerOpen(true)}
+      >
+        <SlidersHorizontal size={14} />
+        {activeMeta.name}
+      </button>
+
+      <div
+        className={`settings-drawer-backdrop ${drawerOpen ? 'open' : ''}`}
+        onClick={() => setDrawerOpen(false)}
+        role="presentation"
+      />
+      <aside className={`settings-drawer ${drawerOpen ? 'open' : ''}`}>
+        <div className="settings-drawer-head">Settings</div>
+        <nav className="settings-drawer-nav">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={activeTab === tab.id ? 'active' : ''}
+                onClick={() => selectTab(tab.id)}
+              >
+                <Icon size={14} />
+                {tab.name}
+              </button>
+            )
+          })}
+        </nav>
+      </aside>
+
+      {activeTab === 'billing' ? (
+        <BillingDefaultsTab settings={settings} saveSettings={saveSettings} />
+      ) : null}
+      {activeTab === 'settlement' ? (
+        <SettlementTab settings={settings} saveSettings={saveSettings} />
+      ) : null}
+      {activeTab === 'manage-admins' ? (
+        <ManageAdminsTab showToast={showToast} />
+      ) : null}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { formatNaira } from '../data/mockData'
+import { formatNaira } from '../lib/format'
 
 function formatDate(value) {
   if (!value) return '—'
@@ -9,14 +9,15 @@ function formatDate(value) {
   }).format(new Date(`${value}T12:00:00`))
 }
 
-export default function InvoiceDocument({ invoice, school }) {
-  const quantity = invoice.quantity || school.students || 1
-  const rate = invoice.rate || Math.round(invoice.amount / quantity)
+export default function InvoiceDocument({ invoice, school, compact = false }) {
+  const quantity = invoice.quantity || school?.students || 1
+  const rate = invoice.rate || Math.round((invoice.amount || 0) / quantity)
   const subtotal = invoice.subtotal || invoice.amount
   const discountAmount = invoice.discountAmount || 0
+  const schoolName = school?.name || invoice.school?.name || 'School'
 
   return (
-    <article className="invoice-document" id="printable-invoice">
+    <article className={`invoice-document ${compact ? 'compact' : ''}`} id="printable-invoice">
       <header className="invoice-document-header">
         <img src="/brand/termresult-logo.jpeg" alt="TermResult" />
         <div className="invoice-title">
@@ -29,7 +30,7 @@ export default function InvoiceDocument({ invoice, school }) {
         <div>
           <strong>TERMRESULT NEXUS LIMITED</strong>
           <span>Bill To:</span>
-          <b>{school.name.toUpperCase()}</b>
+          <b>{String(schoolName).toUpperCase()}</b>
         </div>
         <dl>
           <div>
@@ -41,8 +42,8 @@ export default function InvoiceDocument({ invoice, school }) {
             <dd>{formatDate(invoice.dueAt)}</dd>
           </div>
           <div>
-            <dt>PO Number:</dt>
-            <dd>{invoice.id.replace(/\D/g, '').slice(-6)}</dd>
+            <dt>Period:</dt>
+            <dd>{invoice.period}</dd>
           </div>
           <div className="balance-row">
             <dt>Balance Due:</dt>
@@ -62,7 +63,7 @@ export default function InvoiceDocument({ invoice, school }) {
         </thead>
         <tbody>
           <tr>
-            <td>{(invoice.item || invoice.period).toUpperCase()}</td>
+            <td>{(invoice.item || invoice.period || '').toUpperCase()}</td>
             <td>{quantity.toLocaleString()}</td>
             <td>{formatNaira(rate)}</td>
             <td>{formatNaira(subtotal)}</td>
@@ -79,10 +80,6 @@ export default function InvoiceDocument({ invoice, school }) {
           <div>
             <dt>Discount ({invoice.discountPercent || 0}%):</dt>
             <dd>{formatNaira(discountAmount)}</dd>
-          </div>
-          <div>
-            <dt>Tax (0%):</dt>
-            <dd>{formatNaira(invoice.taxAmount || 0)}</dd>
           </div>
           <div className="invoice-total">
             <dt>Total:</dt>

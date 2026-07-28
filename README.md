@@ -1,31 +1,34 @@
-# TermResult Finance (Frontend)
+# TermResult Finance
 
-React admin frontend for TermResult’s automated financial management system.
+React admin for TermResult platform subscription billing (per school session/term).
 
 ## Features
 
-- Dashboard with collection trends and reminder activity
-- Schools directory (subscribed schools)
-- Invoice generation & status tracking
-- Email / WhatsApp reminder scheduling (UI + mock state)
-- Manual payment confirmation for bank transfers
-- Settings shell + School Portal stub for later expansion
+- First-time finance admin setup + email/password login
+- Dashboard with real collection trends
+- Active TermResult schools directory with billing profiles
+- Invoice generation for unbilled current session/term (active student snapshot)
+- Email invoice send + reminder scheduling (WhatsApp later)
+- Manual bank-transfer payment confirmation
+- Settings (org + settlement account)
+- School Portal stub (later)
 
 ## Stack
 
 - React 19 + Vite
-- React Router
-- Recharts
-- Lucide icons
+- React Router + TanStack Query + Axios
+- Recharts, Lucide
 
 ## Run
 
 ```bash
-cd finance-frontend
+cd finance
 npm install
 npm run dev
 ```
 
-Open the local URL Vite prints (usually `http://localhost:5173`).
+Vite proxies `/api` to `http://127.0.0.1:8000`. Optional: set `VITE_API_URL` in `.env`.
+
+Backend routes live under `/api/finance-admin/*` in `termresult-backend`.
 
 Brand assets live in `public/brand/`.

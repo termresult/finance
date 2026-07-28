@@ -6,8 +6,9 @@ import {
   BellRing,
   BadgeCheck,
   Settings,
-  GraduationCap,
+  LogOut,
 } from 'lucide-react'
+import { getFinanceAdmin } from '../services/api'
 
 const adminLinks = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -18,7 +19,15 @@ const adminLinks = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 
-export default function Sidebar({ open, onNavigate, badges = {} }) {
+export default function Sidebar({ open, onNavigate, badges = {}, onLogout }) {
+  const admin = getFinanceAdmin()
+  const name = admin?.full_name || 'Finance Admin'
+  const initials = name
+    .split(/\s+/)
+    .map((p) => p[0]?.toUpperCase() || '')
+    .join('')
+    .slice(0, 2)
+
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`}>
       <div className="brand">
@@ -31,7 +40,7 @@ export default function Sidebar({ open, onNavigate, badges = {} }) {
         </div>
       </div>
 
-      <nav>
+      <nav className="sidebar-nav">
         <p className="nav-section-label">Admin</p>
         <div className="nav-list">
           {adminLinks.map(({ to, label, icon: Icon, end, badgeKey }) => (
@@ -50,25 +59,27 @@ export default function Sidebar({ open, onNavigate, badges = {} }) {
             </NavLink>
           ))}
         </div>
-
-        <p className="nav-section-label" style={{ marginTop: 22 }}>
-          Coming later
-        </p>
-        <div className="nav-list">
-          <NavLink
-            to="/school-portal"
-            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-            onClick={onNavigate}
-          >
-            <GraduationCap size={18} />
-            <span>School Portal</span>
-          </NavLink>
-        </div>
       </nav>
 
       <div className="sidebar-footer">
-        <p>Connected to TermResult</p>
-        <span>Billing layer for subscribed schools — invoices, reminders, and manual confirmation.</span>
+        <div className="sidebar-user">
+          <div className="user-avatar">{initials || 'FA'}</div>
+          <div className="sidebar-user-copy">
+            <strong>{name}</strong>
+            <small>{admin?.email || 'Finance desk'}</small>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="sidebar-logout"
+          onClick={() => {
+            onNavigate?.()
+            onLogout?.()
+          }}
+        >
+          <LogOut size={16} />
+          Sign out
+        </button>
       </div>
     </aside>
   )

@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
-import { Eye, Mail, MessageCircle, Plus, Printer, Trash2 } from 'lucide-react'
+import { Eye, Mail, Plus, Printer, Send, Trash2 } from 'lucide-react'
 import InvoiceDocument from '../components/InvoiceDocument'
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
-import { formatNaira } from '../data/mockData'
+import { formatDateTime, formatNaira } from '../lib/format'
+import { dueDateFromDays } from '../lib/billing'
+import { getLatestInvoiceEmailDelivery } from '../lib/invoiceDeliveries'
 
 const emptyForm = {
   schoolId: '',
-  period: '2026 Term 2',
-  dueAt: '',
+  dueAt: dueDateFromDays(14),
   discountPercent: 0,
   notes: '',
 }
@@ -20,6 +21,7 @@ export default function Invoices({
   createInvoice,
   deliveries,
   deleteInvoice,
+  sendInvoiceEmail,
 }) {
   const [status, setStatus] = useState('all')
   const [query, setQuery] = useState('')
@@ -27,6 +29,12 @@ export default function Invoices({
   const [form, setForm] = useState(emptyForm)
   const [preview, setPreview] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [sendingId, setSendingId] = useState(null)
+
+  const billableSchools = schools.filter(
+    (s) => s.billable && Number(s.price) > 0 && s.current_session && s.current_term,
+  )
 
   const filtered = useMemo(() => {
     return invoices.filter((inv) => {
@@ -35,21 +43,48 @@ export default function Invoices({
       const matchesQuery =
         !q ||
         inv.id.toLowerCase().includes(q) ||
-        school?.name.toLowerCase().includes(q) ||
-        inv.period.toLowerCase().includes(q)
+        school?.name?.toLowerCase().includes(q) ||
+        inv.period?.toLowerCase().includes(q)
       const matchesStatus = status === 'all' || inv.status === status
       return matchesQuery && matchesStatus
     })
   }, [invoices, schoolMap, query, status])
 
-  const selectedSchool = schools.find((s) => s.id === form.schoolId)
+  const selectedSchool = schools.find((s) => String(s.id) === String(form.schoolId))
+  const periodLabel =
+    selectedSchool?.current_session && selectedSchool?.current_term
+      ? `${selectedSchool.current_session.name} · ${selectedSchool.current_term.name}`
+      : '—'
 
-  function submit() {
-    if (!form.schoolId || !form.dueAt || !form.period) return
-    const invoice = createInvoice(form)
-    setForm(emptyForm)
-    setOpen(false)
-    setPreview(invoice)
+  async function handleSend(invoiceId) {
+    setSendingId(invoiceId)
+    try {
+      await sendInvoiceEmail(invoiceId)
+    } catch {
+      // toast in store
+    } finally {
+      setSendingId(null)
+    }
+  }
+
+  async function submit() {
+    if (!form.schoolId || !form.dueAt) return
+    setBusy(true)
+    try {
+      const invoice = await createInvoice({
+        schoolId: form.schoolId,
+        dueAt: form.dueAt,
+        discountPercent: form.discountPercent,
+        notes: form.notes,
+      })
+      setForm({ ...emptyForm, dueAt: dueDateFromDays(14) })
+      setOpen(false)
+      setPreview(invoice)
+    } catch {
+      // toast handled in store
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -58,9 +93,9 @@ export default function Invoices({
         <div className="panel-header">
           <div>
             <h2>Invoice register</h2>
-            <p>Create invoices and track payment status across schools</p>
+            <p>Create invoices for schools with an unbilled current session/term</p>
           </div>
-          <button className="btn btn-primary" onClick={() => setOpen(true)}>
+          <button className="btn btn-primary" onClick={() => setOpen(true)} type="button">
             <Plus size={16} />
             New invoice
           </button>
@@ -85,73 +120,159 @@ export default function Invoices({
           </div>
 
           <div className="table-wrap">
-            <table>
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>Invoice</th>
                   <th>School</th>
                   <th>Period</th>
-                  <th>Issued</th>
                   <th>Due</th>
                   <th>Amount</th>
                   <th>Status</th>
-                  <th>Delivery</th>
-                  <th />
+                  <th>Last invoice sent</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((inv) => (
-                  <tr key={inv.id}>
-                    <td>
-                      <strong>{inv.id}</strong>
-                      <div className="muted">{inv.notes}</div>
-                    </td>
-                    <td>
-                      <div className="school-cell">
-                        <div className="school-mark">{schoolMap[inv.schoolId]?.code}</div>
-                        <div>{schoolMap[inv.schoolId]?.name}</div>
-                      </div>
-                    </td>
-                    <td>{inv.period}</td>
-                    <td>{inv.issuedAt}</td>
-                    <td>{inv.dueAt}</td>
-                    <td>{formatNaira(inv.amount)}</td>
-                    <td>
-                      <StatusBadge status={inv.status} />
-                    </td>
-                    <td>
-                      {deliveries.some((item) => item.invoiceId === inv.id) ? (
-                        <div className="delivery-badges">
-                          <span title="Sent by email">
-                            <Mail size={14} /> Sent
-                          </span>
-                          <span className="whatsapp" title="Sent by WhatsApp">
-                            <MessageCircle size={14} /> Sent
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="muted">Previous record</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <button className="btn btn-ghost btn-sm" onClick={() => setPreview(inv)}>
-                          <Eye size={14} />
-                          View
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => setDeleteTarget(inv)}
-                        >
-                          <Trash2 size={14} />
-                          Delete
-                        </button>
-                      </div>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>
+                      <div className="empty">No invoices yet.</div>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filtered.map((inv) => {
+                    const latestDelivery = getLatestInvoiceEmailDelivery(deliveries, inv)
+                    return (
+                      <tr key={inv.id}>
+                        <td>
+                          <strong>{inv.id}</strong>
+                        </td>
+                        <td>
+                          <div className="school-cell">
+                            <div className="school-mark">{schoolMap[inv.schoolId]?.code}</div>
+                            <div>{schoolMap[inv.schoolId]?.name || inv.school?.name}</div>
+                          </div>
+                        </td>
+                        <td>{inv.period}</td>
+                        <td>{inv.dueAt}</td>
+                        <td>{formatNaira(inv.amount)}</td>
+                        <td>
+                          <StatusBadge status={inv.status} />
+                        </td>
+                        <td>
+                          {latestDelivery ? (
+                            <div>
+                              <span className="chip">
+                                <Mail size={13} /> Sent
+                              </span>
+                              <div className="last-sent">
+                                {formatDateTime(latestDelivery.sentAt)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="muted">Never</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              type="button"
+                              onClick={() => setPreview(inv)}
+                            >
+                              <Eye size={14} />
+                              View
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              type="button"
+                              disabled={sendingId === inv.id}
+                              onClick={() => handleSend(inv.id)}
+                            >
+                              <Send size={14} />
+                              {sendingId === inv.id ? 'Sending…' : 'Send'}
+                            </button>
+                            {inv.status !== 'paid' ? (
+                              <button
+                                className="btn btn-danger btn-sm"
+                                type="button"
+                                onClick={() => setDeleteTarget(inv)}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
               </tbody>
             </table>
+          </div>
+
+          <div className="mobile-card-list">
+            {filtered.length === 0 ? (
+              <div className="empty">No invoices yet.</div>
+            ) : (
+              filtered.map((inv) => {
+                const latestDelivery = getLatestInvoiceEmailDelivery(deliveries, inv)
+                return (
+                <article className="entity-card" key={`m-${inv.id}`}>
+                  <div className="entity-card-head">
+                    <div>
+                      <strong>{inv.id}</strong>
+                      <div className="muted">{schoolMap[inv.schoolId]?.name || inv.school?.name}</div>
+                    </div>
+                    <StatusBadge status={inv.status} />
+                  </div>
+                  <div className="entity-card-meta">
+                    <div>
+                      Period: <strong>{inv.period}</strong>
+                    </div>
+                    <div>
+                      Due: <strong>{inv.dueAt}</strong>
+                    </div>
+                    <div>
+                      Amount: <strong>{formatNaira(inv.amount)}</strong>
+                    </div>
+                    <div>
+                      Last invoice sent:{' '}
+                      <strong>
+                        {latestDelivery ? formatDateTime(latestDelivery.sentAt) : 'Never'}
+                      </strong>
+                    </div>
+                  </div>
+                  <div className="entity-card-actions">
+                    <button className="btn btn-ghost btn-sm" type="button" onClick={() => setPreview(inv)}>
+                      <Eye size={14} />
+                      View
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      type="button"
+                      disabled={sendingId === inv.id}
+                      onClick={() => handleSend(inv.id)}
+                    >
+                      <Send size={14} />
+                      Send
+                    </button>
+                    {inv.status !== 'paid' ? (
+                      <button
+                        className="btn btn-danger btn-sm"
+                        type="button"
+                        onClick={() => setDeleteTarget(inv)}
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+                )
+              })
+            )}
           </div>
         </div>
       </section>
@@ -162,38 +283,40 @@ export default function Invoices({
           onClose={() => setOpen(false)}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={() => setOpen(false)}>
+              <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={submit}>
-                Create invoice
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={submit}
+                disabled={busy || !form.schoolId}
+              >
+                {busy ? 'Creating…' : 'Create invoice'}
               </button>
             </>
           }
         >
           <div className="form-grid">
             <label className="field-label full">
-              School
+              School (billable current term only)
               <select
                 className="select"
                 value={form.schoolId}
                 onChange={(e) => setForm((f) => ({ ...f, schoolId: e.target.value }))}
               >
                 <option value="">Select school…</option>
-                {schools.map((s) => (
+                {billableSchools.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {s.name} — {s.current_session?.name} · {s.current_term?.name} (
+                    {s.students} students)
                   </option>
                 ))}
               </select>
             </label>
             <label className="field-label">
               Billing period
-              <input
-                className="field"
-                value={form.period}
-                onChange={(e) => setForm((f) => ({ ...f, period: e.target.value }))}
-              />
+              <input className="field" value={periodLabel} readOnly />
             </label>
             <label className="field-label">
               Due date
@@ -213,9 +336,7 @@ export default function Invoices({
                 max="100"
                 step="0.1"
                 value={form.discountPercent}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, discountPercent: e.target.value }))
-                }
+                onChange={(e) => setForm((f) => ({ ...f, discountPercent: e.target.value }))}
               />
             </label>
             <label className="field-label full">
@@ -231,7 +352,7 @@ export default function Invoices({
           {selectedSchool ? (
             <div className="info-card">
               <span>
-                {selectedSchool.students.toLocaleString()} students ×{' '}
+                {selectedSchool.students.toLocaleString()} active students ×{' '}
                 {formatNaira(selectedSchool.price)}
               </span>
               <strong>
@@ -249,30 +370,41 @@ export default function Invoices({
       {preview ? (
         <Modal
           title={`Invoice ${preview.id}`}
-          wide
+          compact
           onClose={() => setPreview(null)}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={() => setPreview(null)}>
+              <button className="btn btn-secondary" type="button" onClick={() => setPreview(null)}>
                 Close
               </button>
-              <button className="btn btn-primary" onClick={() => window.print()}>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                disabled={sendingId === preview.id}
+                onClick={() => handleSend(preview.id)}
+              >
+                <Send size={16} />
+                {sendingId === preview.id ? 'Sending…' : 'Send email'}
+              </button>
+              <button className="btn btn-primary" type="button" onClick={() => window.print()}>
                 <Printer size={16} />
-                Print / Save PDF
+                Print
               </button>
             </>
           }
         >
-          {deliveries.some((item) => item.invoiceId === preview.id) ? (
-            <div className="invoice-delivery-banner">
-              <strong>Invoice delivered instantly</strong>
-              <span>
-                Email: {schoolMap[preview.schoolId]?.email} · WhatsApp:{' '}
-                {schoolMap[preview.schoolId]?.phone}
-              </span>
-            </div>
-          ) : null}
-          <InvoiceDocument invoice={preview} school={schoolMap[preview.schoolId]} />
+          <div className="invoice-delivery-banner">
+            <strong>Email delivery</strong>
+            <span>
+              Sends to {schoolMap[preview.schoolId]?.email || 'the school contact email'}. WhatsApp
+              comes later.
+            </span>
+          </div>
+          <InvoiceDocument
+            compact
+            invoice={preview}
+            school={schoolMap[preview.schoolId] || preview.school}
+          />
         </Modal>
       ) : null}
 
@@ -282,13 +414,14 @@ export default function Invoices({
           onClose={() => setDeleteTarget(null)}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>
+              <button className="btn btn-secondary" type="button" onClick={() => setDeleteTarget(null)}>
                 Cancel
               </button>
               <button
                 className="btn btn-danger"
-                onClick={() => {
-                  deleteInvoice(deleteTarget.id)
+                type="button"
+                onClick={async () => {
+                  await deleteInvoice(deleteTarget.id)
                   setDeleteTarget(null)
                 }}
               >
@@ -300,8 +433,7 @@ export default function Invoices({
         >
           <p style={{ margin: 0, color: 'var(--text-soft)', lineHeight: 1.6 }}>
             Delete <strong>{deleteTarget.id}</strong> for{' '}
-            <strong>{schoolMap[deleteTarget.schoolId]?.name}</strong>? Its scheduled reminders
-            and delivery records will also be removed.
+            <strong>{schoolMap[deleteTarget.schoolId]?.name}</strong>?
           </p>
         </Modal>
       ) : null}

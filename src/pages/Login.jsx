@@ -1,19 +1,36 @@
 import { useState } from 'react'
 import { Eye, EyeOff, LockKeyhole } from 'lucide-react'
-import { validateTemporaryPassword } from '../lib/billing'
+import { Link } from 'react-router-dom'
+import {
+  apiErrorMessage,
+  financeAuth,
+  setFinanceSession,
+} from '../services/api'
 
 export default function Login({ onLogin }) {
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault()
-    if (!validateTemporaryPassword(password)) {
-      setError('Incorrect password. Please try again.')
-      return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await financeAuth.login({
+        email: email.trim(),
+        password,
+      })
+      const data = res.data.data
+      setFinanceSession({ token: data.token, admin: data.admin })
+      onLogin(data.admin)
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Invalid email or password.'))
+    } finally {
+      setBusy(false)
     }
-    onLogin()
   }
 
   return (
@@ -36,9 +53,25 @@ export default function Login({ onLogin }) {
           <div className="login-icon">
             <LockKeyhole size={22} />
           </div>
-          <span className="login-kicker">Administrator access</span>
+          <span className="login-kicker">Finance administrator</span>
           <h2>Welcome back</h2>
-          <p>Enter the temporary admin password to continue.</p>
+          <p>Sign in with your finance admin email and password.</p>
+
+          <label className="field-label">
+            Email
+            <input
+              className={`field ${error ? 'invalid' : ''}`}
+              type="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value)
+                setError('')
+              }}
+              placeholder="you@termresult.com"
+              autoFocus
+              required
+            />
+          </label>
 
           <label className="field-label">
             Password
@@ -51,7 +84,7 @@ export default function Login({ onLogin }) {
                   setError('')
                 }}
                 placeholder="Enter password"
-                autoFocus
+                required
               />
               <button
                 type="button"
@@ -64,9 +97,13 @@ export default function Login({ onLogin }) {
           </label>
           {error ? <div className="login-error">{error}</div> : null}
 
-          <button className="btn btn-primary login-submit" type="submit">
-            Sign in
+          <button className="btn btn-primary login-submit" type="submit" disabled={busy}>
+            {busy ? 'Signing in…' : 'Sign in'}
           </button>
+
+          <p className="muted" style={{ marginTop: 16, textAlign: 'center' }}>
+            First time? <Link to="/setup">Complete finance setup</Link>
+          </p>
         </form>
       </section>
     </main>

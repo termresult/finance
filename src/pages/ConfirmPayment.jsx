@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { BadgeCheck } from 'lucide-react'
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
-import { formatNaira } from '../data/mockData'
+import { formatNaira } from '../lib/format'
 
 const emptyForm = {
   invoiceId: '',
@@ -14,6 +14,7 @@ const emptyForm = {
 export default function ConfirmPayment({ invoices, schoolMap, confirmPayment }) {
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [busy, setBusy] = useState(false)
 
   const unpaid = useMemo(
     () => invoices.filter((i) => i.status === 'pending' || i.status === 'overdue'),
@@ -27,11 +28,18 @@ export default function ConfirmPayment({ invoices, schoolMap, confirmPayment }) 
     setOpen(true)
   }
 
-  function submit() {
+  async function submit() {
     if (!form.invoiceId) return
-    confirmPayment(form)
-    setForm(emptyForm)
-    setOpen(false)
+    setBusy(true)
+    try {
+      await confirmPayment(form)
+      setForm(emptyForm)
+      setOpen(false)
+    } catch {
+      // toast in store
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -44,13 +52,17 @@ export default function ConfirmPayment({ invoices, schoolMap, confirmPayment }) 
         <div className="info-card">
           <span>Pending amount</span>
           <strong>
-            {formatNaira(unpaid.filter((i) => i.status === 'pending').reduce((s, i) => s + i.amount, 0))}
+            {formatNaira(
+              unpaid.filter((i) => i.status === 'pending').reduce((s, i) => s + i.amount, 0),
+            )}
           </strong>
         </div>
         <div className="info-card" style={{ background: 'var(--rose-soft)', borderColor: '#ffd0d9' }}>
           <span>Overdue amount</span>
           <strong>
-            {formatNaira(unpaid.filter((i) => i.status === 'overdue').reduce((s, i) => s + i.amount, 0))}
+            {formatNaira(
+              unpaid.filter((i) => i.status === 'overdue').reduce((s, i) => s + i.amount, 0),
+            )}
           </strong>
         </div>
       </section>
@@ -60,7 +72,8 @@ export default function ConfirmPayment({ invoices, schoolMap, confirmPayment }) 
           <div>
             <h2>Manual payment confirmation</h2>
             <p>
-              Use this when schools pay by bank transfer — verify the reference, then mark the invoice paid.
+              Use this when schools pay by bank transfer — verify the reference, then mark the invoice
+              paid.
             </p>
           </div>
         </div>
@@ -68,50 +81,83 @@ export default function ConfirmPayment({ invoices, schoolMap, confirmPayment }) 
           {unpaid.length === 0 ? (
             <div className="empty">All invoices are paid. Nice work.</div>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Invoice</th>
-                    <th>School</th>
-                    <th>Amount</th>
-                    <th>Due</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {unpaid.map((inv) => (
-                    <tr key={inv.id}>
-                      <td>
-                        <strong>{inv.id}</strong>
-                        <div className="muted">{inv.period}</div>
-                      </td>
-                      <td>
-                        <div className="school-cell">
-                          <div className="school-mark">{schoolMap[inv.schoolId]?.code}</div>
-                          <div>
-                            <div>{schoolMap[inv.schoolId]?.name}</div>
-                            <div className="muted">{schoolMap[inv.schoolId]?.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td>{formatNaira(inv.amount)}</td>
-                      <td>{inv.dueAt}</td>
-                      <td>
-                        <StatusBadge status={inv.status} />
-                      </td>
-                      <td>
-                        <button className="btn btn-success btn-sm" onClick={() => openFor(inv.id)}>
-                          <BadgeCheck size={14} />
-                          Confirm
-                        </button>
-                      </td>
+            <>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice</th>
+                      <th>School</th>
+                      <th>Amount</th>
+                      <th>Due</th>
+                      <th>Status</th>
+                      <th />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {unpaid.map((inv) => (
+                      <tr key={inv.id}>
+                        <td>
+                          <strong>{inv.id}</strong>
+                          <div className="muted">{inv.period}</div>
+                        </td>
+                        <td>
+                          <div className="school-cell">
+                            <div className="school-mark">{schoolMap[inv.schoolId]?.code}</div>
+                            <div>
+                              <div>{schoolMap[inv.schoolId]?.name}</div>
+                              <div className="muted">{schoolMap[inv.schoolId]?.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>{formatNaira(inv.amount)}</td>
+                        <td>{inv.dueAt}</td>
+                        <td>
+                          <StatusBadge status={inv.status} />
+                        </td>
+                        <td>
+                          <button className="btn btn-success btn-sm" onClick={() => openFor(inv.id)}>
+                            <BadgeCheck size={14} />
+                            Confirm
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mobile-card-list">
+                {unpaid.map((inv) => (
+                  <article className="entity-card" key={`m-${inv.id}`}>
+                    <div className="entity-card-head">
+                      <div>
+                        <strong>{inv.id}</strong>
+                        <div className="muted">{schoolMap[inv.schoolId]?.name}</div>
+                      </div>
+                      <StatusBadge status={inv.status} />
+                    </div>
+                    <div className="entity-card-meta">
+                      <div>
+                        Amount: <strong>{formatNaira(inv.amount)}</strong>
+                      </div>
+                      <div>
+                        Due: <strong>{inv.dueAt}</strong>
+                      </div>
+                      <div>
+                        Period: <strong>{inv.period}</strong>
+                      </div>
+                    </div>
+                    <div className="entity-card-actions">
+                      <button className="btn btn-success btn-sm" onClick={() => openFor(inv.id)}>
+                        <BadgeCheck size={14} />
+                        Confirm
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </section>
@@ -125,8 +171,8 @@ export default function ConfirmPayment({ invoices, schoolMap, confirmPayment }) 
               <button className="btn btn-secondary" onClick={() => setOpen(false)}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={submit}>
-                Mark as paid
+              <button className="btn btn-primary" onClick={submit} disabled={busy}>
+                {busy ? 'Saving…' : 'Mark as paid'}
               </button>
             </>
           }
@@ -148,9 +194,6 @@ export default function ConfirmPayment({ invoices, schoolMap, confirmPayment }) 
                 onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
                 placeholder="e.g. TRF-991204"
               />
-              <span className="muted">
-                Leave blank to generate a manual confirmation reference.
-              </span>
             </label>
             <label className="field-label">
               Payment date

@@ -1,179 +1,250 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  initialInvoices,
-  initialReminders,
-  initialSchools,
-  nextInvoiceId,
-} from '../data/mockData'
-import {
-  buildInvoice,
-  buildInvoiceDeliveries,
-  buildReminderSchedule,
-  confirmInvoicePayment,
-  deleteInvoiceRecords,
-} from '../lib/billing'
+  apiErrorMessage,
+  financeData,
+  normalizeSchool,
+} from '../services/api'
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10)
-}
+export function useFinanceStore(showToast) {
+  const queryClient = useQueryClient()
 
-export function useFinanceStore() {
-  const [schools, setSchools] = useState(initialSchools)
-  const [invoices, setInvoices] = useState(initialInvoices)
-  const [reminders, setReminders] = useState(initialReminders)
-  const [deliveries, setDeliveries] = useState([])
-  const [toast, setToast] = useState(null)
+  const dashboardQuery = useQuery({
+    queryKey: ['finance', 'dashboard'],
+    queryFn: async () => (await financeData.dashboard()).data.data,
+  })
+
+  const schoolsQuery = useQuery({
+    queryKey: ['finance', 'schools'],
+    queryFn: async () => {
+      const rows = (await financeData.schools()).data.data || []
+      return rows.map(normalizeSchool)
+    },
+  })
+
+  const invoicesQuery = useQuery({
+    queryKey: ['finance', 'invoices'],
+    queryFn: async () => (await financeData.invoices()).data.data || [],
+  })
+
+  const remindersQuery = useQuery({
+    queryKey: ['finance', 'reminders'],
+    queryFn: async () => (await financeData.reminders()).data.data || [],
+  })
+
+  const settingsQuery = useQuery({
+    queryKey: ['finance', 'settings'],
+    queryFn: async () => (await financeData.settings()).data.data,
+  })
+
+  const invalidateAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['finance'] })
+  }, [queryClient])
+
+  const schools = schoolsQuery.data || []
+  const invoices = invoicesQuery.data || []
+  const reminders = remindersQuery.data || []
+  const dashboard = dashboardQuery.data
 
   const schoolMap = useMemo(
     () => Object.fromEntries(schools.map((s) => [s.id, s])),
     [schools],
   )
 
-  const showToast = useCallback((message) => {
-    setToast(message)
-    window.setTimeout(() => setToast(null), 2800)
-  }, [])
-
-  const createInvoice = useCallback(
-    ({ schoolId, period, notes, dueAt, discountPercent = 0 }) => {
-      const school = schoolMap[schoolId]
-      if (!school) return
-
-      const invoice = buildInvoice({
-        id: nextInvoiceId(invoices),
-        school,
-        period,
-        issuedAt: todayIso(),
-        dueAt,
-        notes,
-        discountPercent,
-      })
-      const automaticReminders = buildReminderSchedule({
-        invoiceId: invoice.id,
-        schoolId,
-        schoolName: school.name,
-        dueAt,
-      })
-      const invoiceDeliveries = buildInvoiceDeliveries({
-        invoiceId: invoice.id,
-        school,
-      })
-
-      setInvoices((prev) => [invoice, ...prev])
-      setReminders((prev) => [...automaticReminders, ...prev])
-      setDeliveries((prev) => [...invoiceDeliveries, ...prev])
-      showToast(`Invoice ${invoice.id} sent by Email & WhatsApp`)
-      return invoice
-    },
-    [invoices, schoolMap, showToast],
-  )
-
-  const updateSchoolPrice = useCallback(
-    (schoolId, price) => {
-      const numericPrice = Math.max(0, Number(price) || 0)
-      setSchools((prev) =>
-        prev.map((school) =>
-          school.id === schoolId ? { ...school, price: numericPrice } : school,
-        ),
-      )
-      showToast('School subscription price updated')
-    },
-    [showToast],
-  )
-
-  const confirmPayment = useCallback(
-    ({ invoiceId, reference, paidAt, note }) => {
-      setInvoices((prev) =>
-        confirmInvoicePayment(prev, {
-          invoiceId,
-          reference,
-          paidAt: paidAt || todayIso(),
-          note,
-        }),
-      )
-      showToast(`Payment confirmed for ${invoiceId}`)
-    },
-    [showToast],
-  )
-
-  const deleteInvoice = useCallback(
-    (invoiceId) => {
-      const records = deleteInvoiceRecords(invoiceId, {
-        invoices,
-        reminders,
-        deliveries,
-      })
-      setInvoices(records.invoices)
-      setReminders(records.reminders)
-      setDeliveries(records.deliveries)
-      showToast(`Invoice ${invoiceId} deleted`)
-    },
-    [deliveries, invoices, reminders, showToast],
-  )
-
-  const scheduleReminder = useCallback(
-    ({ invoiceId, channel, scheduledFor, message }) => {
-      const invoice = invoices.find((i) => i.id === invoiceId)
-      if (!invoice) return
-
-      const reminder = {
-        id: `rem-${Date.now()}`,
-        invoiceId,
-        schoolId: invoice.schoolId,
-        channel,
-        scheduledFor,
-        status: 'scheduled',
-        message,
-      }
-
-      setReminders((prev) => [reminder, ...prev])
-      showToast(`${channel === 'whatsapp' ? 'WhatsApp' : 'Email'} reminder scheduled`)
-      return reminder
-    },
-    [invoices, showToast],
-  )
-
-  const markReminderSent = useCallback(
-    (reminderId) => {
-      setReminders((prev) =>
-        prev.map((r) => (r.id === reminderId ? { ...r, status: 'sent' } : r)),
-      )
-      showToast('Reminder marked as sent')
-    },
-    [showToast],
-  )
+  const deliveries = useMemo(() => {
+    return invoices.flatMap((inv) =>
+      (inv.deliveries || []).map((d) => ({
+        ...d,
+        invoiceId: inv.id,
+      })),
+    )
+  }, [invoices])
 
   const stats = useMemo(() => {
-    const paid = invoices.filter((i) => i.status === 'paid')
-    const pending = invoices.filter((i) => i.status === 'pending')
-    const overdue = invoices.filter((i) => i.status === 'overdue')
-    const collected = paid.reduce((sum, i) => sum + i.amount, 0)
-    const outstanding = [...pending, ...overdue].reduce((sum, i) => sum + i.amount, 0)
-
-    return {
-      collected,
-      outstanding,
-      pendingCount: pending.length,
-      overdueCount: overdue.length,
-      schoolsActive: schools.filter((s) => s.status === 'active').length,
-      remindersDue: reminders.filter((r) => r.status === 'scheduled').length,
+    if (dashboard?.stats) {
+      return {
+        collected: dashboard.stats.collected,
+        outstanding: dashboard.stats.outstanding,
+        pendingCount: invoices.filter((i) => i.status === 'pending').length,
+        overdueCount: dashboard.stats.overdueCount,
+        schoolsActive: dashboard.stats.activeSchools,
+        remindersDue: dashboard.stats.remindersDue,
+      }
     }
-  }, [invoices, reminders, schools])
+    return {
+      collected: 0,
+      outstanding: 0,
+      pendingCount: 0,
+      overdueCount: 0,
+      schoolsActive: schools.length,
+      remindersDue: 0,
+    }
+  }, [dashboard, invoices, schools.length])
+
+  const revenueSeries = dashboard?.revenueSeries || []
+
+  const createInvoice = useMutation({
+    mutationFn: async ({ schoolId, discountPercent, notes, dueAt }) => {
+      const res = await financeData.createInvoice({
+        school_id: Number(schoolId),
+        discount_percent: Number(discountPercent) || 0,
+        notes: notes || null,
+        due_at: dueAt || null,
+      })
+      return res.data.data
+    },
+    onSuccess: (invoice) => {
+      invalidateAll()
+      showToast?.(`Invoice ${invoice.id} created`)
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not create invoice')),
+  })
+
+  const updateSchoolPrice = useMutation({
+    mutationFn: async ({ schoolId, price }) => {
+      const res = await financeData.updateBilling(schoolId, { price: Number(price) || 0 })
+      return res.data.data
+    },
+    onSuccess: () => {
+      invalidateAll()
+      showToast?.('School subscription price updated')
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not update price')),
+  })
+
+  const confirmPayment = useMutation({
+    mutationFn: async ({ invoiceId, reference, paidAt, note }) => {
+      const res = await financeData.confirmPayment(invoiceId, {
+        reference: reference || null,
+        paid_at: paidAt || null,
+        note: note || null,
+      })
+      return res.data.data
+    },
+    onSuccess: (invoice) => {
+      invalidateAll()
+      showToast?.(`Payment confirmed for ${invoice.id}`)
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not confirm payment')),
+  })
+
+  const deleteInvoice = useMutation({
+    mutationFn: async (invoiceId) => {
+      await financeData.deleteInvoice(invoiceId)
+      return invoiceId
+    },
+    onSuccess: (invoiceId) => {
+      invalidateAll()
+      showToast?.(`Invoice ${invoiceId} deleted`)
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not delete invoice')),
+  })
+
+  const sendInvoiceEmail = useMutation({
+    mutationFn: async (invoiceId) => {
+      const res = await financeData.sendInvoiceEmail(invoiceId)
+      return res.data
+    },
+    onSuccess: (payload) => {
+      invalidateAll()
+      showToast?.(payload?.message || 'Invoice email sent')
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not send email')),
+  })
+
+  const scheduleReminder = useMutation({
+    mutationFn: async ({ invoiceId, channel, scheduledFor, message }) => {
+      if (channel === 'whatsapp') {
+        throw new Error('WhatsApp reminders are coming later')
+      }
+      const res = await financeData.scheduleReminder({
+        invoice_id: invoiceId,
+        channel: 'email',
+        scheduled_for: scheduledFor,
+        message,
+      })
+      return res.data.data
+    },
+    onSuccess: () => {
+      invalidateAll()
+      showToast?.('Email reminder scheduled')
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not schedule reminder')),
+  })
+
+  const markReminderSent = useMutation({
+    mutationFn: async (reminderId) => {
+      const res = await financeData.markReminderSent(reminderId)
+      return res.data.data
+    },
+    onSuccess: () => {
+      invalidateAll()
+      showToast?.('Reminder marked as sent')
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not update reminder')),
+  })
+
+  const sendReminderEmail = useMutation({
+    mutationFn: async ({ reminderId, message }) => {
+      const res = await financeData.sendReminderEmail(reminderId, {
+        message: message || undefined,
+      })
+      return res.data
+    },
+    onSuccess: (payload) => {
+      invalidateAll()
+      showToast?.(payload?.message || 'Reminder email sent')
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not send reminder')),
+  })
+
+  const saveSettings = useMutation({
+    mutationFn: async (payload) => {
+      const res = await financeData.updateSettings(payload)
+      return res.data.data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['finance', 'settings'] })
+      showToast?.('Settings saved')
+    },
+    onError: (err) => showToast?.(apiErrorMessage(err, 'Could not save settings')),
+  })
+
+  const loading =
+    dashboardQuery.isLoading ||
+    schoolsQuery.isLoading ||
+    invoicesQuery.isLoading ||
+    remindersQuery.isLoading
 
   return {
+    loading,
     schools,
     schoolMap,
     invoices,
     reminders,
     deliveries,
     stats,
-    toast,
-    createInvoice,
-    updateSchoolPrice,
-    confirmPayment,
-    deleteInvoice,
-    scheduleReminder,
-    markReminderSent,
-    showToast,
+    revenueSeries,
+    settings: settingsQuery.data,
+    createInvoice: (form) => createInvoice.mutateAsync(form),
+    updateSchoolPrice: (schoolId, price) => updateSchoolPrice.mutateAsync({ schoolId, price }),
+    confirmPayment: (form) => confirmPayment.mutateAsync(form),
+    deleteInvoice: (id) => deleteInvoice.mutateAsync(id),
+    sendInvoiceEmail: (id) => sendInvoiceEmail.mutateAsync(id),
+    scheduleReminder: (form) => scheduleReminder.mutateAsync(form),
+    markReminderSent: (id) => markReminderSent.mutateAsync(id),
+    sendReminderEmail: (id, message) =>
+      sendReminderEmail.mutateAsync({ reminderId: id, message }),
+    saveSettings: (payload) => saveSettings.mutateAsync(payload),
+    refresh: invalidateAll,
   }
+}
+
+export function useToast() {
+  const [toast, setToast] = useState(null)
+  const showToast = useCallback((message) => {
+    setToast(message)
+    window.setTimeout(() => setToast(null), 2800)
+  }, [])
+  return { toast, showToast }
 }

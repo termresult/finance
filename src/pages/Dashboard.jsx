@@ -16,19 +16,31 @@ import {
 } from 'lucide-react'
 import StatCard from '../components/StatCard'
 import StatusBadge from '../components/StatusBadge'
-import { formatNaira, revenueSeries } from '../data/mockData'
+import { formatNaira } from '../lib/format'
 
-export default function Dashboard({ stats, invoices, schools, schoolMap, reminders }) {
+export default function Dashboard({
+  loading,
+  stats,
+  invoices,
+  schools,
+  schoolMap,
+  reminders,
+  revenueSeries = [],
+}) {
   const recent = [...invoices].slice(0, 5)
   const latestReminders = [...reminders].slice(0, 4)
+  const chartData = revenueSeries.length
+    ? revenueSeries
+    : [{ month: '—', collected: 0, outstanding: 0 }]
 
   return (
     <div className="page-stack">
+      {loading ? <div className="muted">Loading dashboard…</div> : null}
       <section className="stats-grid">
         <StatCard
           label="Collected"
           value={formatNaira(stats.collected)}
-          meta="Confirmed payments this cycle"
+          meta="Confirmed payments"
           metaTone="up"
           tone="green"
           icon={<Banknote size={18} />}
@@ -44,14 +56,14 @@ export default function Dashboard({ stats, invoices, schools, schoolMap, reminde
         <StatCard
           label="Active Schools"
           value={stats.schoolsActive}
-          meta={`${schools.length} total subscriptions`}
+          meta={`${schools.length} in finance directory`}
           tone="blue"
           icon={<Building2 size={18} />}
         />
         <StatCard
           label="Overdue Invoices"
           value={stats.overdueCount}
-          meta={`${stats.remindersDue} reminders queued`}
+          meta={`${stats.remindersDue} reminders due`}
           metaTone={stats.overdueCount ? 'down' : 'up'}
           tone="rose"
           icon={<AlertTriangle size={18} />}
@@ -69,7 +81,7 @@ export default function Dashboard({ stats, invoices, schools, schoolMap, reminde
           <div className="panel-body">
             <div className="chart-wrap">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueSeries}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="collected" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#2f7cf6" stopOpacity={0.35} />
@@ -121,25 +133,29 @@ export default function Dashboard({ stats, invoices, schools, schoolMap, reminde
           <div className="panel-header">
             <div>
               <h2>Reminder activity</h2>
-              <p>Latest email & WhatsApp outreach</p>
+              <p>Latest email outreach (WhatsApp coming later)</p>
             </div>
           </div>
           <div className="panel-body">
             <div className="timeline">
-              {latestReminders.map((r) => (
-                <div className="timeline-item" key={r.id}>
-                  <div className="timeline-dot" />
-                  <div>
-                    <h4>
-                      {schoolMap[r.schoolId]?.name} · {r.invoiceId}
-                    </h4>
-                    <p>
-                      {r.channel === 'whatsapp' ? 'WhatsApp' : 'Email'} · {r.scheduledFor} ·{' '}
-                      {r.status}
-                    </p>
+              {latestReminders.length === 0 ? (
+                <div className="empty">No reminders yet.</div>
+              ) : (
+                latestReminders.map((r) => (
+                  <div className="timeline-item" key={r.id}>
+                    <div className="timeline-dot" />
+                    <div>
+                      <h4>
+                        {schoolMap[r.schoolId]?.name || r.schoolName} · {r.invoiceId}
+                      </h4>
+                      <p>
+                        {r.channel === 'whatsapp' ? 'WhatsApp' : 'Email'} · {r.scheduledFor} ·{' '}
+                        {r.status}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -153,7 +169,7 @@ export default function Dashboard({ stats, invoices, schools, schoolMap, reminde
           </div>
         </div>
         <div className="table-wrap">
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>Invoice</th>
@@ -165,28 +181,36 @@ export default function Dashboard({ stats, invoices, schools, schoolMap, reminde
               </tr>
             </thead>
             <tbody>
-              {recent.map((inv) => (
-                <tr key={inv.id}>
-                  <td>
-                    <strong>{inv.id}</strong>
-                  </td>
-                  <td>
-                    <div className="school-cell">
-                      <div className="school-mark">{schoolMap[inv.schoolId]?.code}</div>
-                      <div>
-                        <div>{schoolMap[inv.schoolId]?.name}</div>
-                        <div className="muted">{schoolMap[inv.schoolId]?.city}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>{inv.period}</td>
-                  <td>{formatNaira(inv.amount)}</td>
-                  <td>{inv.dueAt}</td>
-                  <td>
-                    <StatusBadge status={inv.status} />
+              {recent.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="empty">No invoices yet.</div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                recent.map((inv) => (
+                  <tr key={inv.id}>
+                    <td>
+                      <strong>{inv.id}</strong>
+                    </td>
+                    <td>
+                      <div className="school-cell">
+                        <div className="school-mark">{schoolMap[inv.schoolId]?.code}</div>
+                        <div>
+                          <div>{schoolMap[inv.schoolId]?.name || inv.school?.name}</div>
+                          <div className="muted">{schoolMap[inv.schoolId]?.city}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{inv.period}</td>
+                    <td>{formatNaira(inv.amount)}</td>
+                    <td>{inv.dueAt}</td>
+                    <td>
+                      <StatusBadge status={inv.status} />
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -1,36 +1,35 @@
-import { Bell, LogOut, Menu, Search } from 'lucide-react'
+import { Bell, Menu } from 'lucide-react'
 
-export default function Topbar({ title, subtitle, onMenu, onLogout }) {
+export default function Topbar({ title, subtitle, onMenu, admin }) {
+  const name = admin?.full_name || 'Finance Admin'
+  const initials = name
+    .split(/\s+/)
+    .map((p) => p[0]?.toUpperCase() || '')
+    .join('')
+    .slice(0, 2)
+
   return (
     <header className="topbar">
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <button className="icon-btn mobile-toggle" onClick={onMenu} aria-label="Open menu">
+      <div className="topbar-title-row">
+        <button className="icon-btn mobile-toggle" onClick={onMenu} aria-label="Open menu" type="button">
           <Menu size={18} />
         </button>
-        <div>
+        <div className="topbar-heading">
           <h1>{title}</h1>
           {subtitle ? <p>{subtitle}</p> : null}
         </div>
       </div>
 
       <div className="topbar-actions">
-        <label className="search-box">
-          <Search size={16} />
-          <input type="search" placeholder="Search schools, invoices…" />
-        </label>
-        <button className="icon-btn" aria-label="Notifications">
-          <Bell size={18} />
+        <button className="icon-btn" aria-label="Notifications" type="button">
+          <Bell size={16} />
         </button>
-        <div className="user-chip">
-          <div className="user-avatar">AD</div>
+        <div className="user-chip" title={name}>
+          <div className="user-avatar">{initials || 'FA'}</div>
           <span>
-            <strong>Admin Desk</strong>
-            <small>TermResult Finance</small>
+            <strong>{name}</strong>
           </span>
         </div>
-        <button className="icon-btn" onClick={onLogout} aria-label="Sign out" title="Sign out">
-          <LogOut size={18} />
-        </button>
       </div>
     </header>
   )
