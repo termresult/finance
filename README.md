@@ -12,6 +12,8 @@ React admin for TermResult platform subscription billing (per school session/ter
 - Manual bank-transfer payment confirmation
 - Settings (org + settlement account)
 - School Portal stub (later)
+- simple features implemented
+- 
 
 ## Stack
 
