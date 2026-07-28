@@ -77,6 +77,7 @@ function AuthenticatedApp({ onLogout }) {
                 invoices={store.invoices}
                 schools={store.schools}
                 schoolMap={store.schoolMap}
+                settings={store.settings}
                 createInvoice={store.createInvoice}
                 deliveries={store.deliveries}
                 deleteInvoice={store.deleteInvoice}

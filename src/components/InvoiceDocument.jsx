@@ -9,12 +9,17 @@ function formatDate(value) {
   }).format(new Date(`${value}T12:00:00`))
 }
 
-export default function InvoiceDocument({ invoice, school, compact = false }) {
+export default function InvoiceDocument({ invoice, school, settings = null, compact = false }) {
   const quantity = invoice.quantity || school?.students || 1
   const rate = invoice.rate || Math.round((invoice.amount || 0) / quantity)
   const subtotal = invoice.subtotal || invoice.amount
   const discountAmount = invoice.discountAmount || 0
   const schoolName = school?.name || invoice.school?.name || 'School'
+  const orgName = settings?.organization_name || 'TermResult Nexus Limited'
+  const hasSettlement =
+    Boolean(settings?.bank_name) ||
+    Boolean(settings?.bank_account_name) ||
+    Boolean(settings?.bank_account_number)
 
   return (
     <article className={`invoice-document ${compact ? 'compact' : ''}`} id="printable-invoice">
@@ -28,7 +33,7 @@ export default function InvoiceDocument({ invoice, school, compact = false }) {
 
       <section className="invoice-parties">
         <div>
-          <strong>TERMRESULT NEXUS LIMITED</strong>
+          <strong>{String(orgName).toUpperCase()}</strong>
           <span>Bill To:</span>
           <b>{String(schoolName).toUpperCase()}</b>
         </div>
@@ -88,11 +93,29 @@ export default function InvoiceDocument({ invoice, school, compact = false }) {
         </dl>
       </section>
 
+      {hasSettlement ? (
+        <section className="invoice-settlement">
+          <span>Settlement account</span>
+          {settings.bank_name ? <p>Bank: {settings.bank_name}</p> : null}
+          {settings.bank_account_name ? <p>Account name: {settings.bank_account_name}</p> : null}
+          {settings.bank_account_number ? (
+            <p>Account number: {settings.bank_account_number}</p>
+          ) : null}
+          <p>Use invoice number {invoice.id} as your payment reference.</p>
+        </section>
+      ) : null}
+
       <footer className="invoice-notes">
         <span>Notes:</span>
-        <p>{invoice.notes}</p>
+        <p>{invoice.notes || '—'}</p>
         <span>Terms:</span>
         <p>{invoice.terms || 'Payment is due on or before the date shown above.'}</p>
+        {settings?.support_email ? (
+          <>
+            <span>Support:</span>
+            <p>{settings.support_email}</p>
+          </>
+        ) : null}
       </footer>
     </article>
   )

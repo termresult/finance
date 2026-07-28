@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Eye, Mail, Plus, Printer, Send, Trash2 } from 'lucide-react'
+import { Download, Eye, Mail, Plus, Printer, Send, Trash2 } from 'lucide-react'
 import InvoiceDocument from '../components/InvoiceDocument'
 import Modal from '../components/Modal'
 import StatusBadge from '../components/StatusBadge'
 import { formatDateTime, formatNaira } from '../lib/format'
 import { dueDateFromDays } from '../lib/billing'
 import { getLatestInvoiceEmailDelivery } from '../lib/invoiceDeliveries'
+import { downloadInvoicePdf } from '../lib/downloadInvoicePdf'
 
 const emptyForm = {
   schoolId: '',
@@ -18,6 +19,7 @@ export default function Invoices({
   invoices,
   schools,
   schoolMap,
+  settings,
   createInvoice,
   deliveries,
   deleteInvoice,
@@ -31,6 +33,7 @@ export default function Invoices({
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [busy, setBusy] = useState(false)
   const [sendingId, setSendingId] = useState(null)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   const billableSchools = schools.filter(
     (s) => s.billable && Number(s.price) > 0 && s.current_session && s.current_term,
@@ -64,6 +67,24 @@ export default function Invoices({
       // toast in store
     } finally {
       setSendingId(null)
+    }
+  }
+
+  async function handleDownloadPdf() {
+    if (!preview) return
+    const school = schoolMap[preview.schoolId] || preview.school
+    const element = document.getElementById('printable-invoice')
+    setDownloadingPdf(true)
+    try {
+      await downloadInvoicePdf({
+        element,
+        school,
+        invoice: preview,
+      })
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setDownloadingPdf(false)
     }
   }
 
@@ -386,6 +407,15 @@ export default function Invoices({
                 <Send size={16} />
                 {sendingId === preview.id ? 'Sending…' : 'Send email'}
               </button>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                disabled={downloadingPdf}
+                onClick={handleDownloadPdf}
+              >
+                <Download size={16} />
+                {downloadingPdf ? 'Preparing…' : 'Download PDF'}
+              </button>
               <button className="btn btn-primary" type="button" onClick={() => window.print()}>
                 <Printer size={16} />
                 Print
@@ -404,6 +434,7 @@ export default function Invoices({
             compact
             invoice={preview}
             school={schoolMap[preview.schoolId] || preview.school}
+            settings={settings}
           />
         </Modal>
       ) : null}

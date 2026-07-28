@@ -1410,10 +1410,15 @@ label.field-label {
 }
 
 .invoice-document-header img {
-  width: 110px;
-  max-height: 40px;
+  width: 180px;
+  max-height: 72px;
   object-fit: contain;
   object-position: left center;
+}
+
+.invoice-document.compact .invoice-document-header img {
+  width: 160px;
+  max-height: 64px;
 }
 
 .invoice-title {
@@ -1534,11 +1539,43 @@ label.field-label {
 }
 
 .invoice-totals .invoice-total {
+  margin-top: 4px;
   font-weight: 700;
+  font-size: 14px;
+}
+
+.invoice-settlement {
+  margin-top: 28px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.invoice-settlement span {
+  display: block;
+  margin-bottom: 8px;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.invoice-settlement p {
+  margin: 0 0 4px;
+  color: #334155;
+  font-size: 12px;
+}
+
+.invoice-settlement p:last-child {
+  margin-bottom: 0;
+  margin-top: 8px;
+  color: #64748b;
 }
 
 .invoice-notes {
-  margin-top: 78px;
+  margin-top: 28px;
   line-height: 1.55;
 }
 
